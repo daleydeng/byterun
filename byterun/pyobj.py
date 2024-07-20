@@ -4,21 +4,12 @@ import collections
 import inspect
 import types
 
-import six
-
-PY3, PY2 = six.PY3, not six.PY3
-
-
 def make_cell(value):
     # Thanks to Alex Gaynor for help with this bit of twistiness.
     # Construct an actual cell object by creating a closure right here,
     # and grabbing the cell object out of the function we create.
     fn = (lambda x: lambda: x)(value)
-    if PY3:
-        return fn.__closure__[0]
-    else:
-        return fn.func_closure[0]
-
+    return fn.__closure__[0]
 
 class Function(object):
     __slots__ = [
@@ -55,21 +46,10 @@ class Function(object):
     def __get__(self, instance, owner):
         if instance is not None:
             return Method(instance, owner, self)
-        if PY2:
-            return Method(None, owner, self)
-        else:
-            return self
+        return self
 
     def __call__(self, *args, **kwargs):
-        if PY2 and self.func_name in ["<setcomp>", "<dictcomp>", "<genexpr>"]:
-            # D'oh! http://bugs.python.org/issue19611 Py2 doesn't know how to
-            # inspect set comprehensions, dict comprehensions, or generator
-            # expressions properly.  They are always functions of one argument,
-            # so just do the right thing.
-            assert len(args) == 1 and not kwargs, "Surprising comprehension!"
-            callargs = {".0": args[0]}
-        else:
-            callargs = inspect.getcallargs(self._func, *args, **kwargs)
+        callargs = inspect.getcallargs(self._func, *args, **kwargs)
         frame = self._vm.make_frame(
             self.func_code, callargs, self.func_globals, {}
         )
@@ -82,7 +62,7 @@ class Function(object):
             retval = self._vm.run_frame(frame)
         return retval
 
-class Method(object):
+class Method:
     def __init__(self, obj, _class, func):
         self.im_self = obj
         self.im_class = _class
@@ -102,7 +82,7 @@ class Method(object):
             return self.im_func(*args, **kwargs)
 
 
-class Cell(object):
+class Cell:
     """A fake cell for closures.
 
     Closures keep names in scope by storing them not in a frame, but in a
@@ -188,8 +168,8 @@ class Frame(object):
         # We don't keep f_lineno up to date, so calculate it based on the
         # instruction address and the line number table.
         lnotab = self.f_code.co_lnotab
-        byte_increments = six.iterbytes(lnotab[0::2])
-        line_increments = six.iterbytes(lnotab[1::2])
+        byte_increments = lnotab[0::2]
+        line_increments = lnotab[1::2]
 
         byte_num = 0
         line_num = self.f_code.co_firstlineno
